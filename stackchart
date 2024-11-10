@@ -1,0 +1,82 @@
+import React, { useEffect, useRef } from 'react';
+import * as d3 from 'd3';
+
+const StackChart = ({ data }) => {
+  const chartRef = useRef(null);
+  const width = 400;
+  const height = 300;
+  const barWidth = 60;
+  const gap = 20;
+
+  useEffect(() => {
+    const svg = d3.select(chartRef.current)
+      .attr("width", width)
+      .attr("height", height);
+
+    // Clear previous contents
+    svg.selectAll("*").remove();
+
+    const yScale = d3.scaleLinear()
+      .domain([d3.min(data, d => d.loser), d3.max(data, d => d.gainer)])
+      .range([height - 50, 50]);
+
+    data.forEach((d, i) => {
+      const xPosition = i * (barWidth + gap);
+
+      // Draw gainer section (positive part)
+      svg.append("rect")
+        .attr("x", xPosition)
+        .attr("y", yScale(d.gainer))
+        .attr("width", barWidth)
+        .attr("height", yScale(0) - yScale(d.gainer))
+        .attr("fill", "#4A73F3"); // Blue color for gainers
+
+      // Draw loser section (negative part)
+      svg.append("rect")
+        .attr("x", xPosition)
+        .attr("y", yScale(0))
+        .attr("width", barWidth)
+        .attr("height", yScale(d.loser) - yScale(0))
+        .attr("fill", "#F4C13C"); // Orange color for losers
+
+      // Add labels for gainer and loser values
+      svg.append("text")
+        .attr("x", xPosition + barWidth / 2)
+        .attr("y", yScale(d.gainer) - 5)
+        .attr("text-anchor", "middle")
+        .attr("fill", "white")
+        .style("font-size", "12px")
+        .text(d.gainer);
+
+      svg.append("text")
+        .attr("x", xPosition + barWidth / 2)
+        .attr("y", yScale(d.loser) + 15)
+        .attr("text-anchor", "middle")
+        .attr("fill", "white")
+        .style("font-size", "12px")
+        .text(d.loser);
+
+      // Add label below each bar for the metric name
+      svg.append("text")
+        .attr("x", xPosition + barWidth / 2)
+        .attr("y", height - 10)
+        .attr("text-anchor", "middle")
+        .style("font-size", "14px")
+        .text(d.label);
+
+      // Add percentage change at the top
+      svg.append("text")
+        .attr("x", xPosition + barWidth / 2)
+        .attr("y", 30)
+        .attr("text-anchor", "middle")
+        .style("font-size", "12px")
+        .style("font-weight", "bold")
+        .attr("fill", "green")
+        .text(d.percentage);
+    });
+  }, [data]);
+
+  return <svg ref={chartRef}></svg>;
+};
+
+export default StackChart;
