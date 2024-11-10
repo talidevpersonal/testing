@@ -80,3 +80,69 @@ const StackChart = ({ data }) => {
 };
 
 export default StackChart;
+
+
+
+import './App.css';
+import StackChart from './StackChart';
+
+const transactions = [
+  { category: 'Revenue', date: '2023-01-01', value: 1000000 },
+  { category: 'Revenue', date: '2024-01-01', value: 1300000 },
+  { category: 'Balances', date: '2023-01-01', value: 500000 },
+  { category: 'Balances', date: '2024-01-01', value: 515000 },
+  { category: 'Outstanding', date: '2023-01-01', value: 700000 },
+  { category: 'Outstanding', date: '2024-01-01', value: 660000 },
+  { category: 'Limits', date: '2023-01-01', value: 800000 },
+  { category: 'Limits', date: '2024-01-01', value: 825000 },
+];
+
+// const data = [
+//   { label: "Revenue", gainer: 4.3, loser: -2.4, percentage: "3.25%" },
+//   { label: "Balances", gainer: 2.5, loser: -4.4, percentage: "3.05%" },
+//   { label: "Outstanding", gainer: 3.5, loser: -1.8, percentage: "3.15%" },
+//   { label: "Limits", gainer: 4.5, loser: -2.8, percentage: "3.35%" },
+// ];
+
+const calculatePercentageChange = (oldValue, newValue) => {
+  return ((newValue - oldValue) / oldValue) * 100;
+};
+
+const getGainersAndLosers = (transactions, year1, year2) => {
+  const year1Data = transactions.filter(d => d.date.startsWith(year1));
+  const year2Data = transactions.filter(d => d.date.startsWith(year2));
+
+  const gainersLosers = year1Data.map((item) => {
+    const correspondingYear2Item = year2Data.find(d => d.category === item.category);
+    if (!correspondingYear2Item) return null; // Skip if no match found for the second year
+
+    const percentageChange = calculatePercentageChange(item.value, correspondingYear2Item.value);
+
+    return {
+      category: item.category,
+      gainer: percentageChange > 0 ? percentageChange : 0,
+      loser: percentageChange < 0 ? percentageChange : 0,
+      percentage: `${percentageChange.toFixed(2)}%`
+    };
+  }).filter(Boolean); // Remove null entries
+
+  return gainersLosers;
+};
+
+// Example usage:
+const year1 = '2023';
+const year2 = '2024';
+const gainersLosers = getGainersAndLosers(transactions, year1, year2);
+
+
+function App() {
+  
+  return (
+    <div className="App">
+       <h1>Financial Gainers and Losers</h1>
+       <StackChart data={gainersLosers} />
+    </div>
+  );
+}
+
+export default App;
