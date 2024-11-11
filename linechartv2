@@ -1,0 +1,104 @@
+// src/TransactionChart.js
+import React, { useEffect, useRef } from 'react';
+import * as d3 from 'd3';
+
+const LinesChart = ({ data }) => {
+  const chartRef = useRef();
+
+  useEffect(() => {
+    const svg = d3.select(chartRef.current);
+    svg.selectAll("*").remove(); // Clear existing content
+
+    const width = 800;
+    const height = 400;
+    const margin = { top: 20, right: 60, bottom: 30, left: 50 };
+
+    const categories = Array.from(new Set(data.map(d => d.category)));
+    const colors = d3.scaleOrdinal()
+      .domain(categories)
+      .range(['#00C6AE', '#D62278', '#c6ae00','#4b00c6']); 
+
+    // Helper function to parse dates
+    const parseDate = d3.timeParse("%Y-%m-%d");
+    const parseYearMonth = d3.timeParse("%Y-%m");
+
+    // Detect date format and parse accordingly
+    const isYearMonthFormat = data.every(d => /^\d{4}-\d{2}$/.test(d.date));
+
+    // Ensure that data points are parsed correctly
+    const parsedData = data.map(d => {
+      const parsedDate = isYearMonthFormat ? parseYearMonth(d.date) : parseDate(d.date);
+      if (!parsedDate) {
+        console.warn("Failed to parse date:", d.date); // Debugging output
+      }
+      return {
+        ...d,
+        parsedDate: parsedDate,
+      };
+    });
+
+    // Define x scale based on parsed date data
+    const x = d3.scaleTime()
+      .domain(d3.extent(parsedData, d => d.parsedDate))
+      .range([margin.left, width - margin.right]);
+
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(parsedData, d => d.value) * 1.1])
+      .range([height - margin.bottom, margin.top]);
+
+    const xAxis = g => g
+      .attr("transform", `translate(0,${height - margin.bottom})`)
+      //.call(d3.axisBottom(x).tickFormat(d => d3.timeFormat(isYearMonthFormat ? "%b %Y" : "%b %d, %Y")(d)))
+      .call(d3.axisBottom(x).tickFormat(d => d3.timeFormat(isYearMonthFormat ? "%b" : "%b")(d)))
+      .call(g => g.select(".domain").remove());
+
+    const yAxis = g => g
+      .attr("transform", `translate(${margin.left},0)`)
+      .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
+      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"))
+      .call(g => g.select(".domain").remove());
+
+    // Draw axes
+    svg.append("g").call(xAxis);
+    svg.append("g").call(yAxis);
+
+    // Define line generator
+    const line = d3.line()
+      .x(d => {
+        const xValue = x(d.parsedDate);
+        if (isNaN(xValue)) {
+          console.warn("Invalid x value for date:", d.date);
+        }
+        return xValue;
+      })
+      .y(d => y(d.value));
+
+    // Draw line for each category
+    categories.forEach((category, i) => {
+      const categoryData = parsedData.filter(d => d.category === category);
+
+      if (categoryData.length === 0) {
+        console.warn("No data found for category:", category);
+        return;
+      }
+
+      svg.append("path")
+        .datum(categoryData)
+        .attr("fill", "none")
+        .attr("stroke", colors(category))
+        .attr("stroke-width", 2)
+        .attr("d", line);
+
+      // Add category label
+      svg.append("text")
+        .attr("x", width - margin.right)
+        .attr("y", margin.top + i * 20)
+        .attr("fill", colors(category))
+        .text(category);
+    });
+  }, [data]);
+
+  return <svg ref={chartRef} width="800" height="400"></svg>;
+};
+
+export default LinesChart;
