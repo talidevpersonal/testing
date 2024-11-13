@@ -1,4 +1,3 @@
-// src/TransactionChart.js
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 
@@ -33,7 +32,12 @@ const LinesChart = ({ data }) => {
       .range([margin.left, width - margin.right]);
 
     const y = d3.scaleLinear()
-      .domain([0, d3.max(parsedData, d => d.value) * 1.1])
+      .domain([0, d3.max(parsedData, d => d.category !== "Limits" ? d.value : 0) * 1.1])
+      .range([height - margin.bottom, margin.top]);
+
+    // Secondary y-axis for "Limits"
+    const yRight = d3.scaleLinear()
+      .domain([0, d3.max(parsedData.filter(d => d.category === "Limits"), d => d.value) * 1.1])
       .range([height - margin.bottom, margin.top]);
 
     const xAxis = g => g
@@ -47,9 +51,17 @@ const LinesChart = ({ data }) => {
       .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"))
       .call(g => g.select(".domain").remove());
 
+    // Right y-axis for "Limits"
+    const yAxisRight = g => g
+      .attr("transform", `translate(${width - margin.right},0)`)
+      .call(d3.axisRight(yRight).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
+      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"))
+      .call(g => g.select(".domain").remove());
+
     // Draw axes
     svg.append("g").call(xAxis);
     svg.append("g").call(yAxis);
+    svg.append("g").call(yAxisRight); // Right side y-axis
 
     // Grid lines for horizontal and vertical axis
     svg.append("g")
@@ -87,12 +99,12 @@ const LinesChart = ({ data }) => {
 
     const line = d3.line()
       .x(d => x(d.parsedDate))
-      .y(d => y(d.value));
+      .y(d => d.category === "Limits" ? yRight(d.value) : y(d.value)); // Use yRight for "Limits"
 
     const area = d3.area()
       .x(d => x(d.parsedDate))
-      .y0(y(0))
-      .y1(d => y(d.value));
+      .y0(d => d.category === "Limits" ? yRight(0) : y(0))
+      .y1(d => d.category === "Limits" ? yRight(d.value) : y(d.value)); // Use yRight for "Limits"
 
     categories.forEach((category, i) => {
       const categoryData = parsedData.filter(d => d.category === category);
@@ -121,3 +133,128 @@ const LinesChart = ({ data }) => {
 };
 
 export default LinesChart;
+
+
+// // src/TransactionChart.js - working copy with gradian
+// import React, { useEffect, useRef } from 'react';
+// import * as d3 from 'd3';
+
+// const LinesChart = ({ data }) => {
+//   const chartRef = useRef();
+
+//   useEffect(() => {
+//     const svg = d3.select(chartRef.current);
+//     svg.selectAll("*").remove(); // Clear existing content
+
+//     const width = 800;
+//     const height = 400;
+//     const margin = { top: 20, right: 60, bottom: 30, left: 50 };
+
+//     const categories = Array.from(new Set(data.map(d => d.category)));
+//     const colors = d3.scaleOrdinal()
+//       .domain(categories)
+//       .range(['#00C6AE', '#D62278', '#c6ae00', '#4b00c6']); 
+
+//     // Helper function to parse dates
+//     const parseDate = d3.timeParse("%Y-%m-%d");
+//     const parseYearMonth = d3.timeParse("%Y-%m");
+
+//     const isYearMonthFormat = data.every(d => /^\d{4}-\d{2}$/.test(d.date));
+//     const parsedData = data.map(d => {
+//       const parsedDate = isYearMonthFormat ? parseYearMonth(d.date) : parseDate(d.date);
+//       return { ...d, parsedDate: parsedDate };
+//     });
+
+//     const x = d3.scaleTime()
+//       .domain(d3.extent(parsedData, d => d.parsedDate))
+//       .range([margin.left, width - margin.right]);
+
+//     const y = d3.scaleLinear()
+//       .domain([0, d3.max(parsedData, d => d.value) * 1.1])
+//       .range([height - margin.bottom, margin.top]);
+
+//     const xAxis = g => g
+//       .attr("transform", `translate(0,${height - margin.bottom})`)
+//       .call(d3.axisBottom(x).tickFormat(d => d3.timeFormat(isYearMonthFormat ? "%b" : "%b %d")(d)))
+//       .call(g => g.select(".domain").remove());
+
+//     const yAxis = g => g
+//       .attr("transform", `translate(${margin.left},0)`)
+//       .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
+//       .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"))
+//       .call(g => g.select(".domain").remove());
+
+//     // Draw axes
+//     svg.append("g").call(xAxis);
+//     svg.append("g").call(yAxis);
+
+//     // Grid lines for horizontal and vertical axis
+//     svg.append("g")
+//       .attr("class", "grid")
+//       .attr("transform", `translate(0,${height - margin.bottom})`)
+//       .call(d3.axisBottom(x).tickSize(-(height - margin.top - margin.bottom)).tickFormat(""))
+//       .call(g => g.selectAll("line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"));
+
+//     svg.append("g")
+//       .attr("class", "grid")
+//       .attr("transform", `translate(${margin.left},0)`)
+//       .call(d3.axisLeft(y).tickSize(-(width - margin.left - margin.right)).tickFormat(""))
+//       .call(g => g.selectAll("line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"));
+
+//     // Define gradients for each category
+//     const defs = svg.append("defs");
+//     categories.forEach((category, i) => {
+//       const gradient = defs.append("linearGradient")
+//         .attr("id", `gradient-${i}`)
+//         .attr("x1", "0%")
+//         .attr("y1", "0%")
+//         .attr("x2", "0%")
+//         .attr("y2", "100%");
+
+//       gradient.append("stop")
+//         .attr("offset", "0%")
+//         .attr("stop-color", colors(category))
+//         .attr("stop-opacity", 0.3);
+
+//       gradient.append("stop")
+//         .attr("offset", "100%")
+//         .attr("stop-color", colors(category))
+//         .attr("stop-opacity", 0);
+//     });
+
+//     const line = d3.line()
+//       .x(d => x(d.parsedDate))
+//       .y(d => y(d.value));
+
+//     const area = d3.area()
+//       .x(d => x(d.parsedDate))
+//       .y0(y(0))
+//       .y1(d => y(d.value));
+
+//     categories.forEach((category, i) => {
+//       const categoryData = parsedData.filter(d => d.category === category);
+
+//       svg.append("path")
+//         .datum(categoryData)
+//         .attr("fill", `url(#gradient-${i})`)
+//         .attr("d", area);
+
+//       svg.append("path")
+//         .datum(categoryData)
+//         .attr("fill", "none")
+//         .attr("stroke", colors(category))
+//         .attr("stroke-width", 2)
+//         .attr("d", line);
+
+//       svg.append("text")
+//         .attr("x", width - margin.right)
+//         .attr("y", margin.top + i * 20)
+//         .attr("fill", colors(category))
+//         .text(category);
+//     });
+//   }, [data]);
+
+//   return <svg ref={chartRef} width="800" height="400"></svg>;
+// };
+
+// export default LinesChart;
