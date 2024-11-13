@@ -1,9 +1,20 @@
 // src/TransactionChart.js
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
 const TransactionChart = ({ data }) => {
   const chartRef = useRef();
+  const [selectedCategories, setSelectedCategories] = useState({});
+
+  // Initialize selectedCategories based on unique categories in the data
+  useEffect(() => {
+    const uniqueCategories = Array.from(new Set(data.map(d => d.category)));
+    const initialSelection = uniqueCategories.reduce((acc, category) => {
+      acc[category] = true;
+      return acc;
+    }, {});
+    setSelectedCategories(initialSelection);
+  }, [data]);
 
   useEffect(() => {
     const svg = d3.select(chartRef.current);
@@ -13,153 +24,143 @@ const TransactionChart = ({ data }) => {
     const height = 400;
     const margin = { top: 20, right: 60, bottom: 30, left: 50 };
 
-    const companies = Array.from(new Set(data.map(d => d.company)));
+    const categories = Array.from(new Set(data.map(d => d.category)));
     const colors = d3.scaleOrdinal()
-      .domain(companies)
-      .range(['#00C6AE', '#D62278']); // Teal and magenta colors
+      .domain(categories)
+      .range(['#00C6AE', '#D62278', '#c6ae00', '#4b00c6']); 
 
-    // Use scalePoint for the x-axis to remove padding
-    const x = d3.scalePoint()
-      .domain(data.map(d => d.month))
+    const parseDate = d3.timeParse("%Y-%m-%d");
+    const parseYearMonth = d3.timeParse("%Y-%m");
+    const isYearMonthFormat = data.every(d => /^\d{4}-\d{2}$/.test(d.date));
+
+    const parsedData = data.map(d => ({
+      ...d,
+      parsedDate: isYearMonthFormat ? parseYearMonth(d.date) : parseDate(d.date)
+    }));
+
+    const x = d3.scaleTime()
+      .domain(d3.extent(parsedData, d => d.parsedDate))
       .range([margin.left, width - margin.right]);
 
-    const y1 = d3.scaleLinear()
-      .domain([0, d3.max(data, d => d.value) * 1.1])
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(parsedData, d => d.value) * 1.1])
       .range([height - margin.bottom, margin.top]);
 
-    const y2 = d3.scaleLinear()
-      .domain([0, d3.max(data, d => d.limit) * 1.1])
+    const yRight = d3.scaleLinear()
+      .domain([0, d3.max(parsedData.filter(d => d.category === "Limits"), d => d.value) * 1.1])
       .range([height - margin.bottom, margin.top]);
 
     const xAxis = g => g
       .attr("transform", `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x).tickSize(0).tickPadding(10))
+      .call(d3.axisBottom(x).tickFormat(d => d3.timeFormat(isYearMonthFormat ? "%b" : "%b %d")(d)))
       .call(g => g.select(".domain").remove());
 
-    const yAxisLeft = g => g
+    const yAxis = g => g
       .attr("transform", `translate(${margin.left},0)`)
-      .call(d3.axisLeft(y1).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
-      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4")) // Dashed gray grid lines
-      .call(g => g.select(".domain").remove()); // Remove axis line
+      .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
+      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"))
+      .call(g => g.select(".domain").remove());
 
-    const yAxisRight = g => g
+    const yRightAxis = g => g
       .attr("transform", `translate(${width - margin.right},0)`)
-      .call(d3.axisRight(y2).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
-      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4")) // Dashed gray grid lines
-      .call(g => g.select(".domain").remove()); // Remove axis line
+      .call(d3.axisRight(yRight).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
+      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"))
+      .call(g => g.select(".domain").remove());
 
-    // Add grid lines with gray color and dashed style
+    svg.append("g").call(xAxis);
+    svg.append("g").call(yAxis);
+    svg.append("g").call(yRightAxis);
+
     svg.append("g")
       .attr("class", "grid")
       .attr("transform", `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x)
-        .tickSize(-(height - margin.top - margin.bottom))
-        .tickFormat("")
-      )
-      .call(g => g.selectAll("line")
-        .attr("stroke", "#ccc")
-        .attr("stroke-dasharray", "4 4")); // Dashed gray grid lines
+      .call(d3.axisBottom(x).tickSize(-(height - margin.top - margin.bottom)).tickFormat(""))
+      .call(g => g.selectAll("line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"));
 
     svg.append("g")
       .attr("class", "grid")
       .attr("transform", `translate(${margin.left},0)`)
-      .call(d3.axisLeft(y1)
-        .tickSize(-(width - margin.left - margin.right))
-        .tickFormat("")
-      )
-      .call(g => g.selectAll("line")
-        .attr("stroke", "#ccc")
-        .attr("stroke-dasharray", "4 4")); // Dashed gray grid lines
+      .call(d3.axisLeft(y).tickSize(-(width - margin.left - margin.right)).tickFormat(""))
+      .call(g => g.selectAll("line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"));
 
-    svg.append("g").call(xAxis);
-    svg.append("g").call(yAxisLeft);
-    svg.append("g").call(yAxisRight);
-
-    // Define gradients for each company
     const defs = svg.append("defs");
-
-    companies.forEach((company, i) => {
+    categories.forEach((category, i) => {
       const gradient = defs.append("linearGradient")
         .attr("id", `gradient-${i}`)
         .attr("x1", "0%")
         .attr("y1", "0%")
         .attr("x2", "0%")
         .attr("y2", "100%");
-      
+
       gradient.append("stop")
         .attr("offset", "0%")
-        .attr("stop-color", colors(company))
-        .attr("stop-opacity", 0.3);
+        .attr("stop-color", colors(category))
+        .attr("stop-opacity", 0.2);
 
       gradient.append("stop")
         .attr("offset", "100%")
-        .attr("stop-color", colors(company))
+        .attr("stop-color", colors(category))
         .attr("stop-opacity", 0);
     });
 
-    // Line generator for value
     const line = d3.line()
-      .x(d => x(d.month))
-      .y(d => y1(d.value));
+      .x(d => x(d.parsedDate))
+      .y(d => d.category === "Limits" ? yRight(d.value) : y(d.value));
 
-    // Area generator for gradient fill
     const area = d3.area()
-      .x(d => x(d.month))
-      .y0(y1(0))
-      .y1(d => y1(d.value));
+      .x(d => x(d.parsedDate))
+      .y0(height - margin.bottom)
+      .y1(d => d.category === "Limits" ? yRight(d.value) : y(d.value));
 
-    // Line generator for limit
-    const lineLimit = d3.line()
-      .x(d => x(d.month))
-      .y(d => y2(d.limit));
+    categories.forEach((category, i) => {
+      if (!selectedCategories[category]) return;
 
-    // Draw lines and gradient areas for each company
-    companies.forEach((company, i) => {
-      const companyData = data.filter(d => d.company === company);
+      const categoryData = parsedData.filter(d => d.category === category);
 
-      // Draw gradient area
       svg.append("path")
-        .datum(companyData)
+        .datum(categoryData)
         .attr("fill", `url(#gradient-${i})`)
         .attr("d", area);
 
-      // Draw line
       svg.append("path")
-        .datum(companyData)
+        .datum(categoryData)
         .attr("fill", "none")
-        .attr("stroke", colors(company))
+        .attr("stroke", colors(category))
         .attr("stroke-width", 2)
         .attr("d", line);
 
-      // Add company legend
       svg.append("text")
         .attr("x", width - margin.right)
         .attr("y", margin.top + i * 20)
-        .attr("fill", colors(company))
-        .text(company);
+        .attr("fill", colors(category))
+        .text(category);
     });
+  }, [data, selectedCategories]);
 
-    // Draw the limit line
-    const limitsData = data.filter(d => d.company === companies[0]); // Assume same limit data for both companies
-    svg.append("path")
-      .datum(limitsData)
-      .attr("fill", "none")
-      .attr("stroke", "#B0C4DE") // Light blue color for limit line
-      .attr("stroke-width", 2)
-      .attr("stroke-dasharray", "4 4")
-      .attr("d", lineLimit);
+  const handleCheckboxChange = (category) => {
+    setSelectedCategories(prevState => ({
+      ...prevState,
+      [category]: !prevState[category]
+    }));
+  };
 
-    // Add Limit label on the top right
-    svg.append("text")
-      .attr("x", width - margin.right)
-      .attr("y", margin.top - 5)
-      .attr("fill", "#B0C4DE")
-      .attr("text-anchor", "end")
-      .text("Limits");
-
-  }, [data]);
-
-  return <svg ref={chartRef} width="800" height="400"></svg>;
+  return (
+    <div>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+        {Object.keys(selectedCategories).map(category => (
+          <label key={category}>
+            <input
+              type="checkbox"
+              checked={selectedCategories[category]}
+              onChange={() => handleCheckboxChange(category)}
+            />
+            {category}
+          </label>
+        ))}
+      </div>
+      <svg ref={chartRef} width="800" height="400"></svg>
+    </div>
+  );
 };
 
 export default TransactionChart;
