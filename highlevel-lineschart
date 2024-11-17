@@ -1,0 +1,176 @@
+// src/TransactionChart.js
+import React, { useEffect, useRef, useState } from 'react';
+import * as d3 from 'd3';
+import XAxis from './XAxis';
+import YAxis from './YAxis';
+import CategoryLines from './CategoryLines';
+
+const LinesChart = ({ data, width = 800, height = 400, margin = { top: 20, right: 60, bottom: 30, left: 50 } }) => {
+  const chartRef = useRef();
+  const [selectedCategories, setSelectedCategories] = useState({});
+
+  useEffect(() => {
+    const uniqueCategories = Array.from(new Set(data.map(d => d.category)));
+    const initialSelection = uniqueCategories.reduce((acc, category) => {
+      acc[category] = true;
+      return acc;
+    }, {});
+    setSelectedCategories(initialSelection);
+  }, [data]);
+
+  const handleCheckboxChange = (category) => {
+    setSelectedCategories(prevState => ({
+      ...prevState,
+      [category]: !prevState[category],
+    }));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+        {Object.keys(selectedCategories).map(category => (
+          <label key={category}>
+            <input
+              type="checkbox"
+              checked={selectedCategories[category]}
+              onChange={() => handleCheckboxChange(category)}
+            />
+            {category}
+          </label>
+        ))}
+      </div>
+      <svg ref={chartRef} width={width} height={height}>
+        <XAxis data={data} width={width} height={height} margin={margin} />
+        <YAxis data={data} width={width} height={height} margin={margin} />
+        <CategoryLines
+          data={data}
+          width={width}
+          height={height}
+          margin={margin}
+          selectedCategories={selectedCategories}
+        />
+      </svg>
+    </div>
+  );
+};
+
+export default LinesChart;
+
+
+// src/XAxis.js
+import React, { useEffect } from 'react';
+import * as d3 from 'd3';
+
+const XAxis = ({ data, width, height, margin }) => {
+  useEffect(() => {
+    const parseDate = d3.timeParse('%Y-%m-%d');
+    const parseYearMonth = d3.timeParse('%Y-%m');
+    const isYearMonthFormat = data.every(d => /^\d{4}-\d{2}$/.test(d.date));
+    const parsedData = data.map(d =>
+      isYearMonthFormat ? parseYearMonth(d.date) : parseDate(d.date),
+    );
+
+    const x = d3.scaleTime()
+      .domain(d3.extent(parsedData))
+      .range([margin.left, width - margin.right]);
+
+    const svg = d3.select('svg');
+    svg.select('.x-axis').remove();
+
+    svg.append('g')
+      .attr('class', 'x-axis')
+      .attr('transform', `translate(0, ${height - margin.bottom})`)
+      .call(
+        d3.axisBottom(x).tickFormat(d =>
+          d3.timeFormat(isYearMonthFormat ? '%b' : '%b %d')(d),
+        ),
+      )
+      .call(g => g.select('.domain').remove());
+  }, [data, width, height, margin]);
+
+  return null;
+};
+
+export default XAxis;
+
+// src/YAxis.js
+import React, { useEffect } from 'react';
+import * as d3 from 'd3';
+
+const YAxis = ({ data, width, height, margin }) => {
+  useEffect(() => {
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.value) * 1.1])
+      .range([height - margin.bottom, margin.top]);
+
+    const svg = d3.select('svg');
+    svg.select('.y-axis').remove();
+
+    svg.append('g')
+      .attr('class', 'y-axis')
+      .attr('transform', `translate(${margin.left}, 0)`)
+      .call(
+        d3.axisLeft(y).ticks(5).tickFormat(d => `${d / 1000000} Mn`),
+      )
+      .call(g =>
+        g
+          .selectAll('.tick line')
+          .attr('stroke', '#ccc')
+          .attr('stroke-dasharray', '4 4'),
+      )
+      .call(g => g.select('.domain').remove());
+  }, [data, width, height, margin]);
+
+  return null;
+};
+
+export default YAxis;
+
+// src/CategoryLines.js
+import React, { useEffect } from 'react';
+import * as d3 from 'd3';
+
+const CategoryLines = ({ data, width, height, margin, selectedCategories }) => {
+  useEffect(() => {
+    const categories = Array.from(new Set(data.map(d => d.category)));
+    const colors = d3.scaleOrdinal()
+      .domain(categories)
+      .range(['#00C6AE', '#D62278', '#c6ae00', '#4b00c6']);
+
+    const parseDate = d3.timeParse('%Y-%m-%d');
+    const parsedData = data.map(d => ({ ...d, parsedDate: parseDate(d.date) }));
+
+    const x = d3.scaleTime()
+      .domain(d3.extent(parsedData, d => d.parsedDate))
+      .range([margin.left, width - margin.right]);
+
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(parsedData, d => d.value) * 1.1])
+      .range([height - margin.bottom, margin.top]);
+
+    const svg = d3.select('svg');
+    svg.selectAll('.category-line').remove();
+
+    const line = d3.line()
+      .x(d => x(d.parsedDate))
+      .y(d => y(d.value));
+
+    categories.forEach((category, i) => {
+      if (!selectedCategories[category]) return;
+
+      const categoryData = parsedData.filter(d => d.category === category);
+
+      svg.append('path')
+        .datum(categoryData)
+        .attr('class', 'category-line')
+        .attr('fill', 'none')
+        .attr('stroke', colors(category))
+        .attr('stroke-width', 2)
+        .attr('d', line);
+    });
+  }, [data, width, height, margin, selectedCategories]);
+
+  return null;
+};
+
+export default CategoryLines;
