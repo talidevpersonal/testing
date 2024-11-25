@@ -1,0 +1,236 @@
+// parent compponent
+import React, { useState } from "react";
+import GroupCompany from "./GroupCompany";
+import Filters from "./Filters";
+
+interface ParentCompanyProps {
+  name: string;
+  cifNumber: string;
+  groupCompanies: GroupCompanyData[];
+}
+
+interface GroupCompanyData {
+  name: string;
+  cifNumber: string;
+  data: TransactionData[];
+}
+
+interface TransactionData {
+  date: string; // e.g., '2024-01'
+  limit: number;
+  outstanding: number;
+  balance: number;
+  netRevenue: number;
+}
+
+const ParentCompany: React.FC<ParentCompanyProps> = ({
+  name,
+  cifNumber,
+  groupCompanies,
+}) => {
+  const [filteredData, setFilteredData] = useState<GroupCompanyData[]>(groupCompanies);
+
+  const handleFilters = (filters: any) => {
+    // Apply filters to group companies
+    const filtered = groupCompanies.filter((group) => {
+      // Example filter logic
+      return filters.product === "All" || group.name.includes(filters.product);
+    });
+    setFilteredData(filtered);
+  };
+
+  return (
+    <div>
+      <h1>{name} ({cifNumber})</h1>
+      <Filters onFilterChange={handleFilters} />
+      {filteredData.map((group) => (
+        <GroupCompany key={group.cifNumber} {...group} />
+      ))}
+    </div>
+  );
+};
+
+export default ParentCompany;
+
+
+import React from "react";
+
+interface GroupCompanyProps {
+  name: string;
+  cifNumber: string;
+  data: TransactionData[];
+}
+
+interface TransactionData {
+  date: string;
+  limit: number;
+  outstanding: number;
+  balance: number;
+  netRevenue: number;
+}
+
+const GroupCompany: React.FC<GroupCompanyProps> = ({ name, cifNumber, data }) => {
+  return (
+    <div style={{ marginTop: "20px" }}>
+      <h2>{name} ({cifNumber})</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Limits</th>
+            <th>Outstanding</th>
+            <th>Balance</th>
+            <th>Net Revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => (
+            <tr key={row.date}>
+              <td>{row.date}</td>
+              <td>{row.limit.toLocaleString()}</td>
+              <td>{row.outstanding.toLocaleString()}</td>
+              <td>{row.balance.toLocaleString()}</td>
+              <td>{row.netRevenue.toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default GroupCompany;
+
+import React from "react";
+
+interface FiltersProps {
+  onFilterChange: (filters: any) => void;
+}
+
+// filter component
+const Filters: React.FC<FiltersProps> = ({ onFilterChange }) => {
+  const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    onFilterChange({ [name]: value });
+  };
+
+  return (
+    <div>
+      <label>
+        Product:
+        <select name="product" onChange={handleFilterChange}>
+          <option value="All">All</option>
+          <option value="Lending">Lending</option>
+          <option value="Trade">Trade</option>
+          <option value="Treasury">Treasury</option>
+        </select>
+      </label>
+
+      <label>
+        Type:
+        <select name="type" onChange={handleFilterChange}>
+          <option value="All">All</option>
+          <option value="Funded">Funded</option>
+          <option value="Non-Funded">Non-Funded</option>
+        </select>
+      </label>
+    </div>
+  );
+};
+
+export default Filters;
+
+import React from "react";
+
+interface ComparisonViewProps {
+  data: TransactionData[];
+  compareBy: "month" | "year";
+}
+
+interface TransactionData {
+  date: string;
+  limit: number;
+  outstanding: number;
+  balance: number;
+  netRevenue: number;
+}
+
+const ComparisonView: React.FC<ComparisonViewProps> = ({ data, compareBy }) => {
+  const groupedData = data.reduce((acc: any, row) => {
+    const key = compareBy === "month" ? row.date.slice(0, 7) : row.date.slice(0, 4);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(row);
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <h3>Comparison ({compareBy === "month" ? "Month vs Month" : "Year vs Year"})</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Limits</th>
+            <th>Outstanding</th>
+            <th>Balance</th>
+            <th>Net Revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.keys(groupedData).map((period) => {
+            const rows = groupedData[period];
+            const totals = rows.reduce(
+              (acc: any, row: TransactionData) => {
+                acc.limit += row.limit;
+                acc.outstanding += row.outstanding;
+                acc.balance += row.balance;
+                acc.netRevenue += row.netRevenue;
+                return acc;
+              },
+              { limit: 0, outstanding: 0, balance: 0, netRevenue: 0 }
+            );
+
+            return (
+              <tr key={period}>
+                <td>{period}</td>
+                <td>{totals.limit.toLocaleString()}</td>
+                <td>{totals.outstanding.toLocaleString()}</td>
+                <td>{totals.balance.toLocaleString()}</td>
+                <td>{totals.netRevenue.toLocaleString()}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default ComparisonView;
+
+import React from "react";
+import ParentCompany from "./ParentCompany";
+
+const mockData = [
+  {
+    name: "Dubai Green Fund Investments",
+    cifNumber: "891238914",
+    data: [
+      { date: "2024-01", limit: 23250000, outstanding: 12000000, balance: 11250000, netRevenue: 500000 },
+      { date: "2024-02", limit: 24250000, outstanding: 13000000, balance: 11250000, netRevenue: 550000 },
+      // More rows...
+    ],
+  },
+  // More group companies...
+];
+
+const App: React.FC = () => (
+  <ParentCompany
+    name="Dubai Electricity and Water Authority"
+    cifNumber="23456789"
+    groupCompanies={mockData}
+  />
+);
+
+export default App;
+
