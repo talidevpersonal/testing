@@ -1,0 +1,140 @@
+import React, { useEffect, useRef } from 'react';
+import * as d3 from 'd3';
+
+// Type definitions
+interface DataPoint {
+  date: string; // e.g., '2020-01-01'
+  [key: string]: number | string;
+}
+
+interface LinesChartProps {
+  data: DataPoint[];
+  children: React.ReactNode;
+}
+
+interface DataLineProps {
+  name: string;
+  color: string;
+  yAxis?: "y1" | "y2";
+}
+
+interface Y2AxisProps {
+  name: string;
+}
+
+export const LinesChart: React.FC<LinesChartProps> = ({ data, children }) => {
+  const chartRef = useRef<SVGSVGElement>(null);
+
+  const parseDate = d3.timeParse("%Y-%m-%d")!;
+  const parsedData = data.map(d => ({
+    ...d,
+    parsedDate: parseDate(d.date),
+  }));
+
+  // Extract child configurations
+  const dataLines: DataLineProps[] = [];
+  let y2AxisField: string | null = null;
+
+  React.Children.forEach(children, child => {
+    if (React.isValidElement(child) && child.type === DataLine) {
+      dataLines.push(child.props as DataLineProps);
+    }
+    if (React.isValidElement(child) && child.type === Y2Axis) {
+      y2AxisField = child.props.name;
+    }
+  });
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    const svg = d3.select(chartRef.current);
+    svg.selectAll("*").remove(); // Clear existing content
+
+    const width = 800;
+    const height = 400;
+    const margin = { top: 20, right: 60, bottom: 30, left: 50 };
+
+    // Create scales
+    const x = d3.scaleTime()
+      .domain(d3.extent(parsedData, d => d.parsedDate) as [Date, Date])
+      .range([margin.left, width - margin.right]);
+
+    const y1 = d3.scaleLinear()
+      .domain([
+        0,
+        d3.max(parsedData, d =>
+          Math.max(...dataLines.filter(line => line.yAxis !== "y2").map(line => d[line.name] as number))
+        )! * 1.1,
+      ])
+      .range([height - margin.bottom, margin.top]);
+
+    const y2 = y2AxisField
+      ? d3.scaleLinear()
+          .domain([
+            0,
+            d3.max(parsedData, d => d[y2AxisField] as number)! * 1.1,
+          ])
+          .range([height - margin.bottom, margin.top])
+      : null;
+
+    // Draw axes
+    svg.append("g")
+      .attr("transform", `translate(0,${height - margin.bottom})`)
+      .call(d3.axisBottom(x));
+
+    svg.append("g")
+      .attr("transform", `translate(${margin.left},0)`)
+      .call(d3.axisLeft(y1).ticks(5));
+
+    if (y2) {
+      svg.append("g")
+        .attr("transform", `translate(${width - margin.right},0)`)
+        .call(d3.axisRight(y2).ticks(5));
+    }
+
+    // Draw data lines
+    dataLines.forEach(line => {
+      const yScale = line.yAxis === "y2" && y2 ? y2 : y1;
+      const lineData = parsedData.map(d => ({
+        parsedDate: d.parsedDate,
+        value: d[line.name],
+      }));
+
+      svg.append("path")
+        .datum(lineData)
+        .attr("fill", "none")
+        .attr("stroke", line.color)
+        .attr("stroke-width", 2)
+        .attr("d", d3.line<{ parsedDate: Date; value: number }>()
+          .x(d => x(d.parsedDate))
+          .y(d => yScale!(d.value))
+        );
+    });
+  }, [data, dataLines, y2AxisField]);
+
+  return <svg ref={chartRef} width="800" height="400"></svg>;
+};
+
+export const DataLine: React.FC<DataLineProps> = () => null; // Placeholder component
+export const Y2Axis: React.FC<Y2AxisProps> = () => null; // Placeholder component
+
+import React from 'react';
+import { LinesChart, DataLine, Y2Axis } from './LinesChart';
+
+const data = [
+  { date: "2020-01-01", Revenue: 10000000, Balances: 2500000, Limit: 150000, Outstanding: 400000 },
+  { date: "2020-02-01", Revenue: 12000000, Balances: 2300000, Limit: 160000, Outstanding: 380000 },
+  { date: "2020-03-01", Revenue: 11000000, Balances: 2400000, Limit: 170000, Outstanding: 390000 },
+];
+
+const App: React.FC = () => (
+  <LinesChart data={data}>
+    <DataLine name="Revenue" color="#00C6AE" />
+    <DataLine name="Balances" color="#D62278" />
+    <DataLine name="Limit" color="#007BFF" yAxis="y2" />
+    <DataLine name="Outstanding" color="#FF9900" />
+    <Y2Axis name="Limit" />
+  </LinesChart>
+);
+
+export default App;
