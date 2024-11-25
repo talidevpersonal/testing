@@ -1,22 +1,33 @@
-// src/TransactionChart.js
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
-const TransactionChart = ({ data }) => {
-  const chartRef = useRef();
-  const [selectedCategories, setSelectedCategories] = useState({});
+// Type definitions
+interface DataPoint {
+  date: string;
+  category: string;
+  value: number;
+}
 
-  // Initialize selectedCategories based on unique categories in the data
+interface LinesChartProps {
+  data: DataPoint[];
+}
+
+const LinesChart: React.FC<LinesChartProps> = ({ data }) => {``
+  const chartRef = useRef<SVGSVGElement>(null);
+  const [selectedCategories, setSelectedCategories] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     const uniqueCategories = Array.from(new Set(data.map(d => d.category)));
     const initialSelection = uniqueCategories.reduce((acc, category) => {
       acc[category] = true;
       return acc;
-    }, {});
+    }, {} as Record<string, boolean>);
     setSelectedCategories(initialSelection);
   }, [data]);
 
   useEffect(() => {
+    if (!chartRef.current) return;
+
     const svg = d3.select(chartRef.current);
     svg.selectAll("*").remove(); // Clear existing content
 
@@ -25,9 +36,9 @@ const TransactionChart = ({ data }) => {
     const margin = { top: 20, right: 60, bottom: 30, left: 50 };
 
     const categories = Array.from(new Set(data.map(d => d.category)));
-    const colors = d3.scaleOrdinal()
+    const colors = d3.scaleOrdinal<string>()
       .domain(categories)
-      .range(['#00C6AE', '#D62278', '#c6ae00', '#4b00c6']); 
+      .range(['#00C6AE', '#D62278', '#007BFF', '#FF9900']);
 
     const parseDate = d3.timeParse("%Y-%m-%d");
     const parseYearMonth = d3.timeParse("%Y-%m");
@@ -35,82 +46,25 @@ const TransactionChart = ({ data }) => {
 
     const parsedData = data.map(d => ({
       ...d,
-      parsedDate: isYearMonthFormat ? parseYearMonth(d.date) : parseDate(d.date)
+      parsedDate: isYearMonthFormat ? parseYearMonth(d.date) : parseDate(d.date),
     }));
 
     const x = d3.scaleTime()
-      .domain(d3.extent(parsedData, d => d.parsedDate))
+      .domain(d3.extent(parsedData, d => d.parsedDate) as [Date, Date])
       .range([margin.left, width - margin.right]);
 
     const y = d3.scaleLinear()
-      .domain([0, d3.max(parsedData, d => d.value) * 1.1])
+      .domain([0, d3.max(parsedData, d => d.value)! * 1.1])
       .range([height - margin.bottom, margin.top]);
 
-    const yRight = d3.scaleLinear()
-      .domain([0, d3.max(parsedData.filter(d => d.category === "Limits"), d => d.value) * 1.1])
-      .range([height - margin.bottom, margin.top]);
+    const line = d3.line<DataPoint>()
+      .x(d => x(d.parsedDate as Date))
+      .y(d => y(d.value));
 
-    const xAxis = g => g
-      .attr("transform", `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x).tickFormat(d => d3.timeFormat(isYearMonthFormat ? "%b" : "%b %d")(d)))
-      .call(g => g.select(".domain").remove());
-
-    const yAxis = g => g
-      .attr("transform", `translate(${margin.left},0)`)
-      .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
-      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"))
-      .call(g => g.select(".domain").remove());
-
-    const yRightAxis = g => g
-      .attr("transform", `translate(${width - margin.right},0)`)
-      .call(d3.axisRight(yRight).ticks(5).tickFormat(d => `${d / 1000000} Mn`))
-      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"))
-      .call(g => g.select(".domain").remove());
-
-    svg.append("g").call(xAxis);
-    svg.append("g").call(yAxis);
-    svg.append("g").call(yRightAxis);
-
-    svg.append("g")
-      .attr("class", "grid")
-      .attr("transform", `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x).tickSize(-(height - margin.top - margin.bottom)).tickFormat(""))
-      .call(g => g.selectAll("line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"));
-
-    svg.append("g")
-      .attr("class", "grid")
-      .attr("transform", `translate(${margin.left},0)`)
-      .call(d3.axisLeft(y).tickSize(-(width - margin.left - margin.right)).tickFormat(""))
-      .call(g => g.selectAll("line").attr("stroke", "#ccc").attr("stroke-dasharray", "4 4"));
-
-    const defs = svg.append("defs");
-    categories.forEach((category, i) => {
-      const gradient = defs.append("linearGradient")
-        .attr("id", `gradient-${i}`)
-        .attr("x1", "0%")
-        .attr("y1", "0%")
-        .attr("x2", "0%")
-        .attr("y2", "100%");
-
-      gradient.append("stop")
-        .attr("offset", "0%")
-        .attr("stop-color", colors(category))
-        .attr("stop-opacity", 0.2);
-
-      gradient.append("stop")
-        .attr("offset", "100%")
-        .attr("stop-color", colors(category))
-        .attr("stop-opacity", 0);
-    });
-
-    const line = d3.line()
-      .x(d => x(d.parsedDate))
-      .y(d => d.category === "Limits" ? yRight(d.value) : y(d.value));
-
-    const area = d3.area()
-      .x(d => x(d.parsedDate))
+    const area = d3.area<DataPoint>()
+      .x(d => x(d.parsedDate as Date))
       .y0(height - margin.bottom)
-      .y1(d => d.category === "Limits" ? yRight(d.value) : y(d.value));
+      .y1(d => y(d.value));
 
     categories.forEach((category, i) => {
       if (!selectedCategories[category]) return;
@@ -119,48 +73,73 @@ const TransactionChart = ({ data }) => {
 
       svg.append("path")
         .datum(categoryData)
-        .attr("fill", `url(#gradient-${i})`)
+        .attr("fill", `${colors(category)}33`) // Add transparency to fill
         .attr("d", area);
 
       svg.append("path")
         .datum(categoryData)
         .attr("fill", "none")
-        .attr("stroke", colors(category))
+        .attr("stroke", colors(category)!)
         .attr("stroke-width", 2)
         .attr("d", line);
-
-      svg.append("text")
-        .attr("x", width - margin.right)
-        .attr("y", margin.top + i * 20)
-        .attr("fill", colors(category))
-        .text(category);
     });
+
+    svg.append("g")
+      .attr("transform", `translate(0,${height - margin.bottom})`)
+      .call(d3.axisBottom(x));
+
+    svg.append("g")
+      .attr("transform", `translate(${margin.left},0)`)
+      .call(d3.axisLeft(y).ticks(5));
   }, [data, selectedCategories]);
 
-  const handleCheckboxChange = (category) => {
+  const handleCheckboxChange = (category: string) => {
     setSelectedCategories(prevState => ({
       ...prevState,
-      [category]: !prevState[category]
+      [category]: !prevState[category],
     }));
   };
 
+  const categories = Array.from(new Set(data.map(d => d.category)));
+
   return (
-    <div>
-      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-        {Object.keys(selectedCategories).map(category => (
-          <label key={category}>
-            <input
-              type="checkbox"
-              checked={selectedCategories[category]}
-              onChange={() => handleCheckboxChange(category)}
-            />
-            {category}
-          </label>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "20px" }}>
+        {/* Left Side: Filters */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
+          {categories.map(category => (
+            <label key={category} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <input
+                type="checkbox"
+                checked={selectedCategories[category] ?? false}
+                onChange={() => handleCheckboxChange(category)}
+              />
+              <span style={{ color: "#333" }}>{category}</span>
+            </label>
+          ))}
+        </div>
+
+        {/* Right Side: Chart */}
+        <div style={{ flex: 3 }}>
+          <svg ref={chartRef} width="800" height="400"></svg>
+        </div>
+      </div>
+
+      {/* Legends */}
+      <div style={{ display: "flex", justifyContent: "center", gap: "20px" }}>
+        {categories.map((category, i) => (
+          <div key={category} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{
+              width: "15px",
+              height: "15px",
+              backgroundColor: d3.scaleOrdinal<string>().domain(categories).range(['#00C6AE', '#D62278', '#007BFF', '#FF9900'])(category) as string,
+            }} />
+            <span>{category}</span>
+          </div>
         ))}
       </div>
-      <svg ref={chartRef} width="800" height="400"></svg>
     </div>
   );
 };
 
-export default TransactionChart;
+export default LinesChart;
